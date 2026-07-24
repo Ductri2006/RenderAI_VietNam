@@ -7,7 +7,7 @@ public sealed class RenderJob
     public Guid ProjectId { get; set; }
     public Guid SourceImageId { get; set; }
     public Guid? StylePresetId { get; set; }
-    public RenderJobStatus Status { get; set; } = RenderJobStatus.Pending;
+    public RenderJobStatus Status { get; set; } = RenderJobStatus.Queued;
     public int CreditCost { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;

@@ -52,6 +52,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
         builder.Entity<CreditWallet>(entity =>
         {
             entity.HasKey(wallet => wallet.Id);
+            entity.Property(wallet => wallet.Version).IsConcurrencyToken();
             entity.HasIndex(wallet => wallet.UserId).IsUnique();
             entity.ToTable(table =>
             {

@@ -5,5 +5,6 @@ public enum CreditTransactionType
     Grant = 1,
     Reserve = 2,
     Consume = 3,
-    Refund = 4
+    Refund = 4,
+    Purchase = 5
 }

@@ -5,112 +5,156 @@ namespace RenderVN.CoreApi.Domain;
 
 public sealed class CreditLedger(AppDbContext db)
 {
-    public async Task<CreditLedgerResult> GrantAsync(
+    public Task<CreditLedgerResult> GrantAsync(
         Guid walletId,
         int credits,
         string idempotencyKey,
         CancellationToken cancellationToken = default)
     {
-        var wallet = await db.CreditWallets
-            .SingleAsync(item => item.Id == walletId, cancellationToken);
-
-        wallet.AvailableCredits += credits;
-        wallet.UpdatedAt = DateTimeOffset.UtcNow;
-        db.CreditTransactions.Add(new CreditTransaction
-        {
-            WalletId = walletId,
-            Type = CreditTransactionType.Grant,
-            AvailableDelta = credits,
-            IdempotencyKey = idempotencyKey
-        });
-
-        await db.SaveChangesAsync(cancellationToken);
-        return CreditLedgerResult.Success();
+        return ApplyAsync(
+            walletId,
+            credits,
+            idempotencyKey,
+            CreditTransactionType.Grant,
+            availableDelta: credits,
+            reservedDelta: 0,
+            cancellationToken);
     }
 
-    public async Task<CreditLedgerResult> ReserveAsync(
+    public Task<CreditLedgerResult> ReserveAsync(
         Guid walletId,
         int credits,
         string idempotencyKey,
         CancellationToken cancellationToken = default)
     {
-        var alreadyApplied = await db.CreditTransactions.AnyAsync(
-            transaction => transaction.WalletId == walletId
-                && transaction.IdempotencyKey == idempotencyKey,
+        return ApplyAsync(
+            walletId,
+            credits,
+            idempotencyKey,
+            CreditTransactionType.Reserve,
+            availableDelta: -credits,
+            reservedDelta: credits,
             cancellationToken);
-        if (alreadyApplied)
+    }
+
+    public Task<CreditLedgerResult> ConsumeAsync(
+        Guid walletId,
+        int credits,
+        string idempotencyKey,
+        CancellationToken cancellationToken = default)
+    {
+        return ApplyAsync(
+            walletId,
+            credits,
+            idempotencyKey,
+            CreditTransactionType.Consume,
+            availableDelta: 0,
+            reservedDelta: -credits,
+            cancellationToken);
+    }
+
+    public Task<CreditLedgerResult> RefundAsync(
+        Guid walletId,
+        int credits,
+        string idempotencyKey,
+        CancellationToken cancellationToken = default)
+    {
+        return ApplyAsync(
+            walletId,
+            credits,
+            idempotencyKey,
+            CreditTransactionType.Refund,
+            availableDelta: credits,
+            reservedDelta: -credits,
+            cancellationToken);
+    }
+
+    private async Task<CreditLedgerResult> ApplyAsync(
+        Guid walletId,
+        int credits,
+        string idempotencyKey,
+        CreditTransactionType type,
+        int availableDelta,
+        int reservedDelta,
+        CancellationToken cancellationToken)
+    {
+        if (credits <= 0)
+        {
+            return CreditLedgerResult.Failure("invalid_credit_amount");
+        }
+
+        if (await HasIdempotencyKeyAsync(walletId, idempotencyKey, cancellationToken))
         {
             return CreditLedgerResult.Failure("duplicate_idempotency_key");
         }
 
         var wallet = await db.CreditWallets
             .SingleAsync(item => item.Id == walletId, cancellationToken);
-        if (wallet.AvailableCredits < credits)
+
+        if (type == CreditTransactionType.Reserve && wallet.AvailableCredits < credits)
         {
             return CreditLedgerResult.Failure("insufficient_credits");
         }
 
-        wallet.AvailableCredits -= credits;
-        wallet.ReservedCredits += credits;
+        if (type is CreditTransactionType.Consume or CreditTransactionType.Refund
+            && wallet.ReservedCredits < credits)
+        {
+            return CreditLedgerResult.Failure("insufficient_reserved_credits");
+        }
+
+        wallet.AvailableCredits += availableDelta;
+        wallet.ReservedCredits += reservedDelta;
+        wallet.Version++;
         wallet.UpdatedAt = DateTimeOffset.UtcNow;
         db.CreditTransactions.Add(new CreditTransaction
         {
             WalletId = walletId,
-            Type = CreditTransactionType.Reserve,
-            AvailableDelta = -credits,
-            ReservedDelta = credits,
+            Type = type,
+            AvailableDelta = availableDelta,
+            ReservedDelta = reservedDelta,
             IdempotencyKey = idempotencyKey
         });
 
-        await db.SaveChangesAsync(cancellationToken);
-        return CreditLedgerResult.Success();
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+            return CreditLedgerResult.Success();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            db.ChangeTracker.Clear();
+            return await ResolveConflictAsync(walletId, idempotencyKey, cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            db.ChangeTracker.Clear();
+            if (await HasIdempotencyKeyAsync(walletId, idempotencyKey, cancellationToken))
+            {
+                return CreditLedgerResult.Failure("duplicate_idempotency_key");
+            }
+
+            throw;
+        }
     }
 
-    public async Task<CreditLedgerResult> ConsumeAsync(
+    private async Task<CreditLedgerResult> ResolveConflictAsync(
         Guid walletId,
-        int credits,
         string idempotencyKey,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken)
     {
-        var wallet = await db.CreditWallets
-            .SingleAsync(item => item.Id == walletId, cancellationToken);
-
-        wallet.ReservedCredits -= credits;
-        wallet.UpdatedAt = DateTimeOffset.UtcNow;
-        db.CreditTransactions.Add(new CreditTransaction
-        {
-            WalletId = walletId,
-            Type = CreditTransactionType.Consume,
-            ReservedDelta = -credits,
-            IdempotencyKey = idempotencyKey
-        });
-
-        await db.SaveChangesAsync(cancellationToken);
-        return CreditLedgerResult.Success();
+        return await HasIdempotencyKeyAsync(walletId, idempotencyKey, cancellationToken)
+            ? CreditLedgerResult.Failure("duplicate_idempotency_key")
+            : CreditLedgerResult.Failure("concurrency_conflict");
     }
 
-    public async Task<CreditLedgerResult> RefundAsync(
+    private Task<bool> HasIdempotencyKeyAsync(
         Guid walletId,
-        int credits,
         string idempotencyKey,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken)
     {
-        var wallet = await db.CreditWallets
-            .SingleAsync(item => item.Id == walletId, cancellationToken);
-
-        wallet.AvailableCredits += credits;
-        wallet.ReservedCredits -= credits;
-        wallet.UpdatedAt = DateTimeOffset.UtcNow;
-        db.CreditTransactions.Add(new CreditTransaction
-        {
-            WalletId = walletId,
-            Type = CreditTransactionType.Refund,
-            AvailableDelta = credits,
-            ReservedDelta = -credits,
-            IdempotencyKey = idempotencyKey
-        });
-
-        await db.SaveChangesAsync(cancellationToken);
-        return CreditLedgerResult.Success();
+        return db.CreditTransactions.AnyAsync(
+            transaction => transaction.WalletId == walletId
+                && transaction.IdempotencyKey == idempotencyKey,
+            cancellationToken);
     }
 }

@@ -6,6 +6,7 @@ public sealed class CreditWallet
     public Guid UserId { get; set; }
     public int AvailableCredits { get; set; }
     public int ReservedCredits { get; set; }
+    public long Version { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 

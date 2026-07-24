@@ -107,6 +107,105 @@ public sealed class CreditLedgerTests
     }
 
     [Fact]
+    public async Task SameIdempotencyKeyCannotGrantTwice()
+    {
+        await using var fixture = await LedgerFixture.CreateAsync();
+
+        var first = await fixture.Ledger.GrantAsync(fixture.Wallet.Id, 20, "same-grant");
+        var second = await fixture.Ledger.GrantAsync(fixture.Wallet.Id, 20, "same-grant");
+
+        Assert.True(first.IsSuccess);
+        Assert.False(second.IsSuccess);
+        Assert.Equal("duplicate_idempotency_key", second.ErrorCode);
+        Assert.Equal(20, (await fixture.Db.CreditWallets.SingleAsync()).AvailableCredits);
+        Assert.Equal(1, await fixture.Db.CreditTransactions.CountAsync());
+    }
+
+    [Fact]
+    public async Task SameIdempotencyKeyCannotConsumeTwice()
+    {
+        await using var fixture = await LedgerFixture.CreateAsync(reservedCredits: 4);
+
+        var first = await fixture.Ledger.ConsumeAsync(fixture.Wallet.Id, 4, "same-consume");
+        var second = await fixture.Ledger.ConsumeAsync(fixture.Wallet.Id, 4, "same-consume");
+
+        Assert.True(first.IsSuccess);
+        Assert.False(second.IsSuccess);
+        Assert.Equal("duplicate_idempotency_key", second.ErrorCode);
+        Assert.Equal(0, (await fixture.Db.CreditWallets.SingleAsync()).ReservedCredits);
+        Assert.Equal(1, await fixture.Db.CreditTransactions.CountAsync());
+    }
+
+    [Fact]
+    public async Task SameIdempotencyKeyCannotRefundTwice()
+    {
+        await using var fixture = await LedgerFixture.CreateAsync(reservedCredits: 4);
+
+        var first = await fixture.Ledger.RefundAsync(fixture.Wallet.Id, 4, "same-refund");
+        var second = await fixture.Ledger.RefundAsync(fixture.Wallet.Id, 4, "same-refund");
+
+        Assert.True(first.IsSuccess);
+        Assert.False(second.IsSuccess);
+        Assert.Equal("duplicate_idempotency_key", second.ErrorCode);
+        var wallet = await fixture.Db.CreditWallets.SingleAsync();
+        Assert.Equal(4, wallet.AvailableCredits);
+        Assert.Equal(0, wallet.ReservedCredits);
+        Assert.Equal(1, await fixture.Db.CreditTransactions.CountAsync());
+    }
+
+    [Theory]
+    [InlineData("grant")]
+    [InlineData("reserve")]
+    [InlineData("consume")]
+    [InlineData("refund")]
+    public async Task NonPositiveCreditAmountsReturnDomainError(string operation)
+    {
+        await using var fixture = await LedgerFixture.CreateAsync(
+            availableCredits: 20,
+            reservedCredits: 4);
+
+        var result = operation switch
+        {
+            "grant" => await fixture.Ledger.GrantAsync(fixture.Wallet.Id, 0, "invalid-amount"),
+            "reserve" => await fixture.Ledger.ReserveAsync(fixture.Wallet.Id, -1, "invalid-amount"),
+            "consume" => await fixture.Ledger.ConsumeAsync(fixture.Wallet.Id, 0, "invalid-amount"),
+            "refund" => await fixture.Ledger.RefundAsync(fixture.Wallet.Id, -1, "invalid-amount"),
+            _ => throw new ArgumentOutOfRangeException(nameof(operation))
+        };
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("invalid_credit_amount", result.ErrorCode);
+        var wallet = await fixture.Db.CreditWallets.SingleAsync();
+        Assert.Equal(20, wallet.AvailableCredits);
+        Assert.Equal(4, wallet.ReservedCredits);
+        Assert.Empty(await fixture.Db.CreditTransactions.ToListAsync());
+    }
+
+    [Fact]
+    public async Task ConsumeWithInsufficientReservedCreditsReturnsDomainError()
+    {
+        await using var fixture = await LedgerFixture.CreateAsync(reservedCredits: 3);
+
+        var result = await fixture.Ledger.ConsumeAsync(fixture.Wallet.Id, 4, "too-many-consume");
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("insufficient_reserved_credits", result.ErrorCode);
+        Assert.Empty(await fixture.Db.CreditTransactions.ToListAsync());
+    }
+
+    [Fact]
+    public async Task RefundWithInsufficientReservedCreditsReturnsDomainError()
+    {
+        await using var fixture = await LedgerFixture.CreateAsync(reservedCredits: 3);
+
+        var result = await fixture.Ledger.RefundAsync(fixture.Wallet.Id, 4, "too-many-refund");
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("insufficient_reserved_credits", result.ErrorCode);
+        Assert.Empty(await fixture.Db.CreditTransactions.ToListAsync());
+    }
+
+    [Fact]
     public async Task InsufficientCreditsReturnsDomainErrorWithoutLedgerMutation()
     {
         await using var fixture = await LedgerFixture.CreateAsync(availableCredits: 3);
