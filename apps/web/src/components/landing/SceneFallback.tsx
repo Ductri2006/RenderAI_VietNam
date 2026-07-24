@@ -13,10 +13,17 @@ export function SceneFallback({ reducedMotion = false, reason = "preview" }: Sce
   return (
     <div
       className="scene-fallback"
-      role="img"
-      aria-label="Bản xem trước kiến trúc với các lớp mặt phẳng, đường phối cảnh và điểm nhấn màu đất nung"
+      role="group"
+      aria-labelledby="scene-fallback-title"
       data-static={reducedMotion || reason !== "preview" ? "true" : "false"}
     >
+      <Image
+        className="scene-fallback__image"
+        src="/room-preview.webp"
+        alt="Bản xem trước kiến trúc với lớp tường, sàn và điểm nhấn đất nung"
+        fill
+        sizes="(max-width: 900px) 100vw, 55vw"
+      />
       <div className="scene-fallback__ceiling" aria-hidden="true" />
       <div className="scene-fallback__wall scene-fallback__wall--back" aria-hidden="true" />
       <div className="scene-fallback__wall scene-fallback__wall--side" aria-hidden="true" />
@@ -25,9 +32,10 @@ export function SceneFallback({ reducedMotion = false, reason = "preview" }: Sce
       <div className="scene-fallback__frame" aria-hidden="true" />
       <div className="scene-fallback__accent" aria-hidden="true" />
       <div className="scene-fallback__label">
-        <span>{reasonCopy[reason]}</span>
+        <span id="scene-fallback-title">{reasonCopy[reason]}</span>
         <strong>Không phải kết quả AI</strong>
       </div>
     </div>
   );
 }
+import Image from "next/image";

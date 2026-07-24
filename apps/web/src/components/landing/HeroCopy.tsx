@@ -14,7 +14,7 @@ export function HeroCopy() {
         <a className="button-primary" href="/app">
           Bắt đầu một không gian
         </a>
-        <a className="button-secondary" href="#quy-trinh">
+        <a className="button-secondary" href="#how-it-works">
           Xem cách hoạt động
         </a>
       </div>

@@ -40,7 +40,7 @@ export function LandingSections() {
         </div>
       </section>
 
-      <section id="quy-trinh" className="landing-section" aria-labelledby="process-heading">
+      <section id="how-it-works" className="landing-section" aria-labelledby="process-heading">
         <div className="page-width process-layout">
           <div className="section-heading">
             <p className="eyebrow">Quy trình gọn hơn</p>
@@ -61,7 +61,7 @@ export function LandingSections() {
         </div>
       </section>
 
-      <section className="landing-section landing-section--tint" aria-labelledby="styles-heading">
+      <section id="styles" className="landing-section landing-section--tint" aria-labelledby="styles-heading">
         <div className="page-width styles-layout">
           <div className="section-heading">
             <p className="eyebrow">Bốn hướng thẩm mỹ</p>

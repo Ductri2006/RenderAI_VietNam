@@ -67,6 +67,56 @@ a:focus-visible {
   padding: 28px 0 72px;
 }
 
+.site-nav {
+  position: relative;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 56px;
+  gap: 28px;
+}
+
+.site-nav__brand {
+  font-size: 0.98rem;
+  font-weight: 680;
+  letter-spacing: -0.045em;
+}
+
+.site-nav__brand span {
+  color: var(--terracotta);
+}
+
+.site-nav__links {
+  display: flex;
+  align-items: center;
+  gap: clamp(14px, 2.4vw, 32px);
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.site-nav__links a:not(.site-nav__cta):hover {
+  color: var(--terracotta-dark);
+}
+
+.site-nav__cta {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0 15px;
+  background: var(--ink);
+  color: var(--stone-0);
+  font-size: 0.78rem;
+  font-weight: 620;
+  transition: transform 180ms ease, background-color 180ms ease;
+}
+
+.site-nav__cta:hover {
+  background: var(--terracotta-dark);
+  transform: translateY(-1px);
+}
+
 .hero-wrap::before {
   position: absolute;
   z-index: -1;
@@ -197,7 +247,30 @@ a:focus-visible {
 }
 
 .room-wrap {
+  position: relative;
   min-width: 0;
+}
+
+.scene-bypass {
+  position: absolute;
+  z-index: 8;
+  top: 12px;
+  left: 12px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--stone-0);
+  font-size: 0.76rem;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-10px);
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.scene-bypass:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
 }
 
 .scroll-room {
@@ -292,6 +365,16 @@ a:focus-visible {
   inset: 0;
   overflow: hidden;
   background: linear-gradient(135deg, #dce1dc, #bfc7c2);
+}
+
+.scene-fallback__image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.45;
+  mix-blend-mode: multiply;
 }
 
 .scene-fallback__ceiling,
@@ -440,6 +523,17 @@ a:focus-visible {
   background: var(--terracotta);
   content: "";
   animation: loading-slide 1.2s ease-in-out infinite;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 @keyframes sketch-float {
@@ -789,6 +883,14 @@ a:focus-visible {
 
   .hero-wrap {
     padding-bottom: 38px;
+  }
+
+  .site-nav__links {
+    gap: 10px;
+  }
+
+  .site-nav__links > a:not(.site-nav__cta) {
+    display: none;
   }
 
   .hero-title {
