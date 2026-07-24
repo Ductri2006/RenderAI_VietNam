@@ -1,0 +1,16 @@
+.worktrees/
+.env
+.env.*
+!.env.example
+node_modules/
+.next/
+bin/
+obj/
+.venv/
+__pycache__/
+*.pyc
+test-results/
+playwright-report/
+coverage/
+uploads/
+*.local
