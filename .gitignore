@@ -7,10 +7,13 @@ node_modules/
 bin/
 obj/
 .venv/
+*.egg-info/
 __pycache__/
 *.pyc
 test-results/
 playwright-report/
 coverage/
 uploads/
+test-screenshots/
+.pytest_cache/
 *.local

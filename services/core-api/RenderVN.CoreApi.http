@@ -1,0 +1,6 @@
+@RenderVN.CoreApi_HostAddress = http://localhost:5262
+
+GET {{RenderVN.CoreApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
