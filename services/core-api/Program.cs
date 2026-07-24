@@ -17,3 +17,5 @@ app.MapGet("/health", () => Results.Ok(new { status = "ok" }))
     .WithOpenApi();
 
 app.Run();
+
+public partial class Program;
