@@ -11,6 +11,12 @@ type GateOptions = {
   webgl?: boolean;
   reducedMotion?: boolean;
 };
+type TimelineOptions = {
+  scrollTrigger?: {
+    pin?: boolean;
+    onUpdate?: (trigger: { progress: number }) => void;
+  };
+};
 
 const harness = vi.hoisted(() => ({
   throwSpline: false,
@@ -20,7 +26,8 @@ const harness = vi.hoisted(() => ({
   intersectionCallback: undefined as IntersectionCallback | undefined,
   idleCallback: undefined as (() => void) | undefined,
   reducedMotionListener: undefined as (() => void) | undefined,
-  timelineOptions: undefined as { scrollTrigger?: { pin?: boolean } } | undefined,
+  narrowListener: undefined as (() => void) | undefined,
+  timelineOptions: undefined as TimelineOptions | undefined,
   contextRevert: vi.fn(),
   observerDisconnect: vi.fn(),
   observerObserve: vi.fn(),
@@ -52,7 +59,7 @@ vi.mock("gsap", () => {
         callback();
         return { revert: harness.contextRevert };
       }),
-      timeline: vi.fn((options: { scrollTrigger?: { pin?: boolean } }) => {
+      timeline: vi.fn((options: TimelineOptions) => {
         harness.timelineOptions = options;
         return timeline;
       }),
@@ -84,6 +91,7 @@ async function loadScrollRoom({
     onchange: null,
     addEventListener: (_type: string, listener: () => void) => {
       if (query.includes("prefers-reduced-motion")) harness.reducedMotionListener = listener;
+      if (query.includes("max-width")) harness.narrowListener = listener;
     },
     removeEventListener: vi.fn(),
     addListener: vi.fn(),
@@ -137,6 +145,7 @@ describe("ScrollRoom lifecycle", () => {
     harness.intersectionCallback = undefined;
     harness.idleCallback = undefined;
     harness.reducedMotionListener = undefined;
+    harness.narrowListener = undefined;
     harness.timelineOptions = undefined;
   });
 
@@ -159,6 +168,9 @@ describe("ScrollRoom lifecycle", () => {
     flushCapabilityCheck();
     expect(harness.intersectionCallback).toBeTypeOf("function");
     expect(screen.queryByTestId("spline-scene")).not.toBeInTheDocument();
+    expect(screen.getByText("Phác thảo")).toBeInTheDocument();
+    act(() => harness.timelineOptions?.scrollTrigger?.onUpdate?.({ progress: 0.4 }));
+    expect(screen.getByText("Quét không gian")).toBeInTheDocument();
 
     act(() => harness.intersectionCallback?.([{ isIntersecting: true }]));
     expect(screen.getByRole("status")).toHaveTextContent("Đang dựng không gian");
@@ -222,6 +234,28 @@ describe("ScrollRoom lifecycle", () => {
     expect(screen.getByAltText(/Bản xem trước kiến trúc/)).toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(harness.observerObserve).not.toHaveBeenCalled();
+    expect(harness.timelineTo).not.toHaveBeenCalled();
+  });
+
+  it("updates the scene lifecycle when the narrow media query changes", async () => {
+    const { ScrollRoom } = await loadScrollRoom();
+    render(<ScrollRoom />);
+    flushCapabilityCheck();
+
+    expect(harness.timelineTo).toHaveBeenCalledTimes(5);
+    expect(harness.observerObserve).toHaveBeenCalledTimes(1);
+
+    harness.narrow = true;
+    act(() => harness.narrowListener?.());
+    expect(harness.contextRevert).toHaveBeenCalledTimes(1);
+    expect(harness.observerDisconnect).toHaveBeenCalled();
+    expect(harness.timelineTo).toHaveBeenCalledTimes(5);
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+
+    harness.narrow = false;
+    act(() => harness.narrowListener?.());
+    expect(harness.timelineTo).toHaveBeenCalledTimes(10);
+    expect(harness.observerObserve).toHaveBeenCalledTimes(2);
   });
 
   it("keeps devices without WebGL on the static fallback", async () => {
@@ -247,6 +281,8 @@ describe("ScrollRoom lifecycle", () => {
 
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.getByText("Bản xem trước tĩnh")).toBeInTheDocument();
+    expect(harness.contextRevert).toHaveBeenCalledTimes(1);
+    expect(harness.timelineTo).toHaveBeenCalledTimes(5);
     act(() => harness.idleCallback?.());
     expect(screen.queryByTestId("spline-scene")).not.toBeInTheDocument();
   });

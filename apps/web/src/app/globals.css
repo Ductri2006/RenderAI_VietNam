@@ -822,6 +822,46 @@ a:focus-visible {
   letter-spacing: 0.04em;
 }
 
+.workspace-placeholder {
+  display: grid;
+  min-height: 100dvh;
+  place-items: center;
+  padding: 24px;
+  background:
+    linear-gradient(135deg, transparent 0 68%, rgba(185, 87, 63, 0.08) 68% 69%, transparent 69%),
+    var(--stone-0);
+}
+
+.workspace-placeholder__panel {
+  width: min(100%, 720px);
+  padding: clamp(32px, 7vw, 72px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: rgba(245, 245, 241, 0.92);
+  box-shadow: var(--shadow-soft);
+}
+
+.workspace-placeholder__panel h1 {
+  max-width: 11ch;
+  margin-top: 22px;
+  font-size: clamp(2.8rem, 7vw, 5.8rem);
+  font-weight: 520;
+  letter-spacing: -0.075em;
+  line-height: 0.96;
+}
+
+.workspace-placeholder__panel > p:not(.eyebrow) {
+  max-width: 53ch;
+  margin-top: 26px;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.workspace-placeholder__panel .button-primary {
+  width: fit-content;
+  margin-top: 32px;
+}
+
 @media (max-width: 900px) {
   .page-width {
     width: min(100% - 32px, 680px);

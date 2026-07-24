@@ -56,10 +56,6 @@ export function isWebGLAvailable() {
   }
 }
 
-function isNarrowDevice() {
-  return window.matchMedia("(max-width: 720px)").matches || window.innerWidth <= 720;
-}
-
 function SceneLoading() {
   return (
     <div className="scene-loading" role="status" aria-live="polite">
@@ -76,6 +72,14 @@ export function getSceneState(progress: number): SceneState {
   if (progress < 0.8) return "styles";
   return "reveal";
 }
+
+const sceneStateLabels: Record<SceneState, string> = {
+  sketch: "Phác thảo",
+  build: "Dựng khối",
+  scan: "Quét không gian",
+  styles: "Chọn phong cách",
+  reveal: "Hoàn thiện",
+};
 
 export function ScrollRoom() {
   const roomRef = useRef<HTMLDivElement>(null);
@@ -95,10 +99,19 @@ export function ScrollRoom() {
   }, []);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setCapability({ webgl: isWebGLAvailable(), narrow: isNarrowDevice() });
-    }, 0);
-    return () => window.clearTimeout(timer);
+    const narrowMedia = window.matchMedia("(max-width: 720px)");
+    const update = () => {
+      setCapability({
+        webgl: isWebGLAvailable(),
+        narrow: narrowMedia.matches || window.innerWidth <= 720,
+      });
+    };
+    const timer = window.setTimeout(update, 0);
+    narrowMedia.addEventListener?.("change", update);
+    return () => {
+      window.clearTimeout(timer);
+      narrowMedia.removeEventListener?.("change", update);
+    };
   }, []);
 
   useEffect(() => {
@@ -152,7 +165,14 @@ export function ScrollRoom() {
   }, [capability, reducedMotion]);
 
   useEffect(() => {
-    if (!roomRef.current || reducedMotion || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (
+      !roomRef.current ||
+      !capability ||
+      capability.narrow ||
+      reducedMotion ||
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    )
+      return;
 
     const context = gsap.context(() => {
       const timeline = gsap.timeline({
@@ -176,7 +196,7 @@ export function ScrollRoom() {
     }, roomRef);
 
     return () => context.revert();
-  }, [reducedMotion]);
+  }, [capability, reducedMotion]);
 
   const fallbackReason = sceneError ? "error" : reducedMotion ? "reduced-motion" : "preview";
   const sceneBlocked = !sceneUrl || reducedMotion || !capability?.webgl || capability.narrow;
@@ -211,7 +231,7 @@ export function ScrollRoom() {
         )}
         <div className="scroll-room__state" aria-live="polite">
           <span className="scroll-room__state-dot" aria-hidden="true" />
-          <span>{state}</span>
+          <span>{sceneStateLabels[state]}</span>
         </div>
         <div className="scroll-room__caption">
           {reducedMotion ? "Chế độ chuyển động tối giản" : "Kéo qua để thấy không gian thành hình"}
