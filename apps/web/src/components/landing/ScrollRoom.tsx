@@ -21,7 +21,7 @@ const SplineScene = sceneUrl
         ),
       {
         ssr: false,
-        loading: () => <SceneLoading />,
+        loading: ({ error }) => (error ? <SceneFallback reason="error" /> : <SceneLoading />),
       },
     )
   : null;
@@ -69,7 +69,7 @@ function SceneLoading() {
   );
 }
 
-function getSceneState(progress: number): SceneState {
+export function getSceneState(progress: number): SceneState {
   if (progress < 0.2) return "sketch";
   if (progress < 0.4) return "build";
   if (progress < 0.6) return "scan";
@@ -104,10 +104,15 @@ export function ScrollRoom() {
   useEffect(() => {
     if (!capability) return;
     const { narrow: isNarrow, webgl: hasWebgl } = capability;
-
-    if (!sceneUrl || reducedMotion || isNarrow || !hasWebgl || !roomRef.current) return;
-
     const room = roomRef.current;
+    const sceneBlocked = !sceneUrl || reducedMotion || isNarrow || !hasWebgl || !room;
+
+    if (sceneBlocked) {
+      const resetTimer = window.setTimeout(() => setPreparingScene(false), 0);
+      return () => window.clearTimeout(resetTimer);
+    }
+
+    if (!room) return;
     let idleHandle: number | undefined;
     let timeoutHandle: number | undefined;
     let cancelled = false;
@@ -142,6 +147,7 @@ export function ScrollRoom() {
       const idleWindow = window as Window & { cancelIdleCallback?: (handle: number) => void };
       if (idleHandle !== undefined) idleWindow.cancelIdleCallback?.(idleHandle);
       if (timeoutHandle !== undefined) window.clearTimeout(timeoutHandle);
+      setPreparingScene(false);
     };
   }, [capability, reducedMotion]);
 
@@ -172,11 +178,7 @@ export function ScrollRoom() {
     return () => context.revert();
   }, [reducedMotion]);
 
-  const fallbackReason = sceneError
-    ? "error"
-    : reducedMotion
-      ? "reduced-motion"
-      : "preview";
+  const fallbackReason = sceneError ? "error" : reducedMotion ? "reduced-motion" : "preview";
   const sceneBlocked = !sceneUrl || reducedMotion || !capability?.webgl || capability.narrow;
 
   return (
@@ -187,8 +189,9 @@ export function ScrollRoom() {
       <div
         ref={roomRef}
         className="scroll-room"
-        data-state={reducedMotion ? "reveal" : state}
+        role="region"
         aria-labelledby="scroll-room-title"
+        data-state={reducedMotion ? "reveal" : state}
       >
         <span id="scroll-room-title" className="sr-only">
           Không gian mô phỏng năm bước của RenderVN AI
@@ -201,7 +204,7 @@ export function ScrollRoom() {
           <SplineErrorBoundary onError={() => setSceneError(true)}>
             <SplineScene scene={sceneUrl} />
           </SplineErrorBoundary>
-        ) : preparingScene && !sceneError ? (
+        ) : preparingScene && !sceneBlocked && !sceneError ? (
           <SceneLoading />
         ) : (
           <SceneFallback reducedMotion={reducedMotion} reason={fallbackReason} />
