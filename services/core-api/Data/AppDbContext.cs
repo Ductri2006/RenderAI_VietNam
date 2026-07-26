@@ -30,6 +30,14 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
         return base.SaveChangesAsync(cancellationToken);
     }
 
+    public override Task<int> SaveChangesAsync(
+        bool acceptAllChangesOnSuccess,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureLedgerIsAppendOnly();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
     private void EnsureLedgerIsAppendOnly()
     {
         var mutatesLedger = ChangeTracker.Entries<CreditTransaction>()
@@ -81,6 +89,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
         builder.Entity<Project>(entity =>
         {
             entity.HasKey(project => project.Id);
+            entity.HasAlternateKey(project => new { project.Id, project.UserId });
             entity.Property(project => project.Name).HasMaxLength(200);
             entity.HasIndex(project => project.UserId);
             entity.HasOne(project => project.User)
@@ -92,6 +101,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
         builder.Entity<SourceImage>(entity =>
         {
             entity.HasKey(image => image.Id);
+            entity.HasAlternateKey(image => new { image.Id, image.UserId });
             entity.Property(image => image.StorageKey).HasMaxLength(500);
             entity.Property(image => image.MimeType).HasMaxLength(100);
             entity.HasOne(image => image.User)
@@ -100,13 +110,15 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
                 .OnDelete(DeleteBehavior.NoAction);
             entity.HasOne(image => image.Project)
                 .WithMany(project => project.SourceImages)
-                .HasForeignKey(image => image.ProjectId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .HasForeignKey(image => new { image.ProjectId, image.UserId })
+                .HasPrincipalKey(project => new { project.Id, project.UserId })
+                .OnDelete(DeleteBehavior.NoAction);
         });
 
         builder.Entity<RenderJob>(entity =>
         {
             entity.HasKey(job => job.Id);
+            entity.HasAlternateKey(job => new { job.Id, job.UserId });
             entity.HasIndex(job => new { job.UserId, job.CreatedAt });
             entity.HasOne(job => job.User)
                 .WithMany(user => user.RenderJobs)
@@ -114,12 +126,14 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
                 .OnDelete(DeleteBehavior.NoAction);
             entity.HasOne(job => job.Project)
                 .WithMany(project => project.RenderJobs)
-                .HasForeignKey(job => job.ProjectId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .HasForeignKey(job => new { job.ProjectId, job.UserId })
+                .HasPrincipalKey(project => new { project.Id, project.UserId })
+                .OnDelete(DeleteBehavior.NoAction);
             entity.HasOne(job => job.SourceImage)
                 .WithMany(image => image.RenderJobs)
-                .HasForeignKey(job => job.SourceImageId)
-                .OnDelete(DeleteBehavior.Restrict);
+                .HasForeignKey(job => new { job.SourceImageId, job.UserId })
+                .HasPrincipalKey(image => new { image.Id, image.UserId })
+                .OnDelete(DeleteBehavior.NoAction);
             entity.HasOne(job => job.StylePreset)
                 .WithMany(preset => preset.RenderJobs)
                 .HasForeignKey(job => job.StylePresetId)
@@ -137,8 +151,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
                 .OnDelete(DeleteBehavior.NoAction);
             entity.HasOne(result => result.RenderJob)
                 .WithOne(job => job.Result)
-                .HasForeignKey<RenderResult>(result => result.RenderJobId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .HasForeignKey<RenderResult>(result => new { result.RenderJobId, result.UserId })
+                .HasPrincipalKey<RenderJob>(job => new { job.Id, job.UserId })
+                .OnDelete(DeleteBehavior.NoAction);
         });
 
         builder.Entity<PaymentOrder>(entity =>

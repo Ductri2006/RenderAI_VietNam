@@ -1,5 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using RenderVN.CoreApi.Data;
+using RenderVN.CoreApi.Domain;
 
 namespace RenderVN.CoreApi.Tests.Integration;
 
@@ -44,6 +48,23 @@ public sealed class ProjectEndpointTests(ApiFactory factory) : IClassFixture<Api
         var error = await response.Content.ReadFromJsonAsync<ApiError>();
         Assert.NotNull(error);
         Assert.Equal("invalid_room_type", error.Code);
+    }
+
+    [Fact]
+    public async Task ProjectNameLongerThanTwoHundredCharactersReturnsStableValidationError()
+    {
+        var client = await CreateRegisteredClientAsync();
+
+        using var response = await client.PostAsJsonAsync("/api/projects", new
+        {
+            name = new string('x', 201),
+            roomType = "living-room"
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var error = await response.Content.ReadFromJsonAsync<ApiError>();
+        Assert.NotNull(error);
+        Assert.Equal("invalid_name", error.Code);
     }
 
     [Fact]
@@ -108,12 +129,63 @@ public sealed class ProjectEndpointTests(ApiFactory factory) : IClassFixture<Api
         Assert.Equal(HttpStatusCode.OK, ownerRead.StatusCode);
     }
 
+    [Fact]
+    public async Task DeletingPopulatedProjectRemovesChildrenInSafeOrder()
+    {
+        var owner = await CreateRegisteredClientAsync();
+        var project = await CreateProjectAsync(owner, "Populated Project", "kitchen");
+        var renderJobId = Guid.NewGuid();
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var userId = (await db.Users.SingleAsync(user => user.Email == GetEmail(owner))).Id;
+            var sourceImage = new SourceImage
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                ProjectId = project.Id,
+                SourceType = SourceType.Upload,
+                StorageKey = "source.png",
+                MimeType = "image/png"
+            };
+            var renderJob = new RenderJob
+            {
+                Id = renderJobId,
+                UserId = userId,
+                ProjectId = project.Id,
+                SourceImageId = sourceImage.Id,
+                CreditCost = 4
+            };
+            var renderResult = new RenderResult
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                RenderJobId = renderJob.Id,
+                StorageKey = "result.png"
+            };
+            db.AddRange(sourceImage, renderJob, renderResult);
+            await db.SaveChangesAsync();
+        }
+
+        using var deleted = await owner.DeleteAsync($"/api/projects/{project.Id}");
+
+        Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
+        using var verificationScope = factory.Services.CreateScope();
+        var verificationDb = verificationScope.ServiceProvider.GetRequiredService<AppDbContext>();
+        Assert.False(await verificationDb.SourceImages.AnyAsync(image => image.ProjectId == project.Id));
+        Assert.False(await verificationDb.RenderJobs.AnyAsync(job => job.ProjectId == project.Id));
+        Assert.False(await verificationDb.RenderResults.AnyAsync(result => result.RenderJobId == renderJobId));
+    }
+
     private async Task<HttpClient> CreateRegisteredClientAsync()
     {
         var client = factory.CreateAuthenticatedClient();
+        var email = $"project-{Guid.NewGuid():N}@example.com";
+        client.DefaultRequestHeaders.Add("X-Test-Email", email);
         using var registration = await client.PostAsJsonAsync("/api/auth/register", new
         {
-            email = $"project-{Guid.NewGuid():N}@example.com",
+            email,
             password = "StrongPass123!"
         });
         Assert.Equal(HttpStatusCode.Created, registration.StatusCode);
@@ -133,6 +205,9 @@ public sealed class ProjectEndpointTests(ApiFactory factory) : IClassFixture<Api
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         return (await response.Content.ReadFromJsonAsync<ProjectResponse>())!;
     }
+
+    private static string GetEmail(HttpClient client) =>
+        client.DefaultRequestHeaders.GetValues("X-Test-Email").Single();
 
     private sealed record ProjectResponse(
         Guid Id,

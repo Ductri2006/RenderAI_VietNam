@@ -58,6 +58,34 @@ public sealed class AppDbContextModelTests
         AssertIndex<CreditTransaction>(db.Model, true, "WalletId", "IdempotencyKey");
     }
 
+    [Fact]
+    public void ChildEntitiesUseCompositeOwnerForeignKeys()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseSqlite(connection)
+            .Options;
+        using var db = new AppDbContext(options);
+
+        AssertCompositeForeignKey<SourceImage, Project>(db.Model, "ProjectId", "UserId");
+        AssertCompositeForeignKey<RenderJob, Project>(db.Model, "ProjectId", "UserId");
+        AssertCompositeForeignKey<RenderJob, SourceImage>(db.Model, "SourceImageId", "UserId");
+        AssertCompositeForeignKey<RenderResult, RenderJob>(db.Model, "RenderJobId", "UserId");
+    }
+
+    private static void AssertCompositeForeignKey<TDependent, TPrincipal>(
+        IModel model,
+        params string[] propertyNames)
+    {
+        var entity = model.FindEntityType(typeof(TDependent));
+        Assert.NotNull(entity);
+        var foreignKey = entity.GetForeignKeys().SingleOrDefault(candidate =>
+            candidate.PrincipalEntityType.ClrType == typeof(TPrincipal)
+            && candidate.Properties.Select(property => property.Name).SequenceEqual(propertyNames));
+        Assert.NotNull(foreignKey);
+    }
+
     private static void AssertIndex<TEntity>(
         IModel model,
         bool unique,

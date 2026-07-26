@@ -33,17 +33,18 @@ public static class ProjectEndpoints
                 "Room type must be living-room, bedroom, or kitchen."));
         }
 
-        if (string.IsNullOrWhiteSpace(request.Name))
+        var projectName = request.Name?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(projectName) || projectName.Length > 200)
         {
             return Results.BadRequest(new ApiError(
                 "invalid_name",
-                "Project name is required."));
+                "Project name is required and must not exceed 200 characters."));
         }
 
         var project = new Project
         {
             UserId = GetUserId(principal),
-            Name = request.Name.Trim(),
+            Name = projectName,
             RoomType = roomType
         };
         db.Projects.Add(project);
@@ -95,6 +96,9 @@ public static class ProjectEndpoints
     {
         var userId = GetUserId(principal);
         var project = await db.Projects
+            .Include(item => item.SourceImages)
+            .Include(item => item.RenderJobs)
+                .ThenInclude(job => job.Result)
             .SingleOrDefaultAsync(
                 item => item.Id == id && item.UserId == userId,
                 cancellationToken);
@@ -103,6 +107,11 @@ public static class ProjectEndpoints
             return Results.NotFound(new ApiError("project_not_found", "Project was not found."));
         }
 
+        db.RenderResults.RemoveRange(project.RenderJobs
+            .Where(job => job.Result is not null)
+            .Select(job => job.Result!));
+        db.RenderJobs.RemoveRange(project.RenderJobs);
+        db.SourceImages.RemoveRange(project.SourceImages);
         db.Projects.Remove(project);
         await db.SaveChangesAsync(cancellationToken);
         return Results.NoContent();

@@ -43,6 +43,14 @@ public sealed class CreditConcurrencyTests
         await using var db2 = new AppDbContext(options2);
         await db1.CreditWallets.SingleAsync();
         await db2.CreditWallets.SingleAsync();
+        var pendingProject = new Project
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            Name = "Pending unrelated project",
+            RoomType = RoomType.LivingRoom
+        };
+        db2.Projects.Add(pendingProject);
 
         var first = await new CreditLedger(db1).ReserveAsync(wallet.Id, 4, "first-operation");
         var second = await new CreditLedger(db2).ReserveAsync(wallet.Id, 4, "second-operation");
@@ -55,5 +63,8 @@ public sealed class CreditConcurrencyTests
         Assert.Equal(16, persisted.AvailableCredits);
         Assert.Equal(4, persisted.ReservedCredits);
         Assert.Equal(1, await db1.CreditTransactions.CountAsync());
+        Assert.Equal(EntityState.Added, db2.Entry(pendingProject).State);
+        await db2.SaveChangesAsync();
+        Assert.True(await db1.Projects.AnyAsync(project => project.Id == pendingProject.Id));
     }
 }

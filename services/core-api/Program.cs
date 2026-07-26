@@ -9,7 +9,9 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(DatabaseConfiguration.GetConnectionString(builder.Configuration)));
+    options.UseNpgsql(DatabaseConfiguration.GetConnectionString(
+        builder.Configuration,
+        builder.Environment)));
 builder.Services.AddIdentityCore<ApplicationUser>(options =>
     {
         options.User.RequireUniqueEmail = true;
@@ -37,6 +39,7 @@ builder.Services.ConfigureApplicationCookie(options =>
 });
 builder.Services.AddAuthorization();
 builder.Services.AddScoped<CreditLedger>();
+builder.Services.AddScoped<ICreditGrant>(services => services.GetRequiredService<CreditLedger>());
 
 var app = builder.Build();
 

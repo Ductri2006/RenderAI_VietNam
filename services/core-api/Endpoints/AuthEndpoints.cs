@@ -26,7 +26,7 @@ public static class AuthEndpoints
         UserManager<ApplicationUser> userManager,
         SignInManager<ApplicationUser> signInManager,
         AppDbContext db,
-        CreditLedger ledger,
+        ICreditGrant creditGrant,
         CancellationToken cancellationToken)
     {
         var existingUser = await userManager.FindByEmailAsync(request.Email);
@@ -75,11 +75,19 @@ public static class AuthEndpoints
         db.CreditWallets.Add(wallet);
         await db.SaveChangesAsync(cancellationToken);
 
-        await ledger.GrantAsync(
+        var grantResult = await creditGrant.GrantAsync(
             wallet.Id,
             20,
             $"registration:{user.Id:N}",
             cancellationToken);
+        if (!grantResult.IsSuccess)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return Results.BadRequest(new ApiError(
+                "grant_failed",
+                "Registration credit grant failed."));
+        }
+
         await transaction.CommitAsync(cancellationToken);
 
         await signInManager.SignInAsync(user, isPersistent: false);

@@ -47,6 +47,36 @@ public sealed class CreditLedgerTests
     }
 
     [Fact]
+    public async Task SuccessfulLedgerOperationDoesNotSaveUnrelatedTrackedEntities()
+    {
+        await using var fixture = await LedgerFixture.CreateAsync(availableCredits: 20);
+        var pendingProject = new Project
+        {
+            Id = Guid.NewGuid(),
+            UserId = fixture.Wallet.UserId,
+            Name = "Pending unrelated project",
+            RoomType = RoomType.LivingRoom
+        };
+        fixture.Db.Projects.Add(pendingProject);
+
+        var result = await fixture.Ledger.ReserveAsync(
+            fixture.Wallet.Id,
+            4,
+            "isolated-reserve");
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(EntityState.Added, fixture.Db.Entry(pendingProject).State);
+        Assert.False(await fixture.Db.Projects
+            .AsNoTracking()
+            .AnyAsync(project => project.Id == pendingProject.Id));
+
+        await fixture.Db.SaveChangesAsync();
+        Assert.True(await fixture.Db.Projects
+            .AsNoTracking()
+            .AnyAsync(project => project.Id == pendingProject.Id));
+    }
+
+    [Fact]
     public async Task ConsumeClearsReservedCreditsWithoutChangingAvailableCredits()
     {
         await using var fixture = await LedgerFixture.CreateAsync(
@@ -245,6 +275,34 @@ public sealed class CreditLedgerTests
         fixture.Db.CreditTransactions.Remove(transaction);
 
         var exception = Assert.Throws<InvalidOperationException>(() => fixture.Db.SaveChanges());
+        Assert.Equal("Credit transactions are immutable.", exception.Message);
+    }
+
+    [Fact]
+    public async Task PersistedLedgerRowsCannotBeModifiedThroughAsyncAcceptAllChangesOverload()
+    {
+        await using var fixture = await LedgerFixture.CreateAsync();
+        await fixture.Ledger.GrantAsync(fixture.Wallet.Id, 20, "immutable-async-overload");
+        var transaction = await fixture.Db.CreditTransactions.SingleAsync();
+
+        transaction.AvailableDelta = 999;
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => fixture.Db.SaveChangesAsync(acceptAllChangesOnSuccess: false));
+        Assert.Equal("Credit transactions are immutable.", exception.Message);
+    }
+
+    [Fact]
+    public async Task PersistedLedgerRowsCannotBeDeletedThroughSyncAcceptAllChangesOverload()
+    {
+        await using var fixture = await LedgerFixture.CreateAsync();
+        await fixture.Ledger.GrantAsync(fixture.Wallet.Id, 20, "immutable-sync-overload");
+        var transaction = await fixture.Db.CreditTransactions.SingleAsync();
+
+        fixture.Db.CreditTransactions.Remove(transaction);
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => fixture.Db.SaveChanges(acceptAllChangesOnSuccess: false));
         Assert.Equal("Credit transactions are immutable.", exception.Message);
     }
 
