@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using RenderVN.CoreApi.Data;
@@ -127,6 +128,33 @@ public sealed class AuthEndpointTests(ApiFactory factory) : IClassFixture<ApiFac
         var payload = await me.Content.ReadFromJsonAsync<MeResponse>();
         Assert.NotNull(payload);
         Assert.Equal(email, payload.Email);
+    }
+
+    [Fact]
+    public async Task DevelopmentHttpLoginCookieIsHttpOnlyAndLaxWithoutSecureFlag()
+    {
+        var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+            BaseAddress = new Uri("http://localhost"),
+            HandleCookies = false
+        });
+        var email = $"http-cookie-{Guid.NewGuid():N}@example.com";
+        var credentials = new
+        {
+            email,
+            password = "StrongPass123!"
+        };
+        using var registration = await client.PostAsJsonAsync("/api/auth/register", credentials);
+        Assert.Equal(HttpStatusCode.Created, registration.StatusCode);
+
+        using var login = await client.PostAsJsonAsync("/api/auth/login", credentials);
+
+        Assert.Equal(HttpStatusCode.NoContent, login.StatusCode);
+        var cookie = Assert.Single(login.Headers.GetValues("Set-Cookie"));
+        Assert.Contains("; httponly", cookie, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("; samesite=lax", cookie, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("; secure", cookie, StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed record ApiError(string Code, string Message);
