@@ -96,6 +96,7 @@ public static class ProjectEndpoints
     {
         var userId = GetUserId(principal);
         var project = await db.Projects
+            .AsSplitQuery()
             .Include(item => item.SourceImages)
             .Include(item => item.RenderJobs)
                 .ThenInclude(job => job.Result)

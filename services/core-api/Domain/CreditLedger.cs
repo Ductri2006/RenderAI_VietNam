@@ -206,7 +206,7 @@ public sealed class CreditLedger(AppDbContext db) : ICreditGrant
     {
         public static SuspendedEntry Capture(EntityEntry entry)
         {
-            var originalValues = entry.State == EntityState.Modified
+            var originalValues = entry.State is EntityState.Modified or EntityState.Deleted
                 ? entry.Properties.ToDictionary(
                     property => property.Metadata.Name,
                     property => property.OriginalValue)

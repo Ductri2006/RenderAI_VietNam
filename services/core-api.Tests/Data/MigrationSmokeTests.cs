@@ -20,5 +20,6 @@ public sealed class MigrationSmokeTests
 
         Assert.Contains(migrations, migration => migration.EndsWith("_InitialCreate"));
         Assert.Contains(migrations, migration => migration.EndsWith("_AddCreditWalletConcurrency"));
+        Assert.Contains(migrations, migration => migration.EndsWith("_AddOwnershipConstraints"));
     }
 }

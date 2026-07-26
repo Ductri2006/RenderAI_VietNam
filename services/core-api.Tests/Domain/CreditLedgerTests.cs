@@ -77,6 +77,37 @@ public sealed class CreditLedgerTests
     }
 
     [Fact]
+    public async Task LedgerRestoresDeletedConcurrencyTrackedEntityWithOriginalValues()
+    {
+        await using var fixture = await LedgerFixture.CreateAsync(availableCredits: 20);
+        var otherUser = new ApplicationUser
+        {
+            Id = Guid.NewGuid(),
+            UserName = "deleted@example.com",
+            Email = "deleted@example.com",
+            ConcurrencyStamp = "original-stamp"
+        };
+        fixture.Db.Users.Add(otherUser);
+        await fixture.Db.SaveChangesAsync();
+
+        otherUser.ConcurrencyStamp = "changed-stamp";
+        fixture.Db.Users.Remove(otherUser);
+
+        var result = await fixture.Ledger.ReserveAsync(
+            fixture.Wallet.Id,
+            4,
+            "deleted-entity-reserve");
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(EntityState.Deleted, fixture.Db.Entry(otherUser).State);
+
+        await fixture.Db.SaveChangesAsync();
+        Assert.False(await fixture.Db.Users
+            .AsNoTracking()
+            .AnyAsync(user => user.Id == otherUser.Id));
+    }
+
+    [Fact]
     public async Task ConsumeClearsReservedCreditsWithoutChangingAvailableCredits()
     {
         await using var fixture = await LedgerFixture.CreateAsync(
