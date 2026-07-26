@@ -122,7 +122,7 @@ AI_CALLBACK_SECRET=replace-me
 VNPAY_TMN_CODE=replace-me
 VNPAY_HASH_SECRET=replace-me
 VNPAY_RETURN_URL=http://localhost:3000/payment/return
-NEXT_PUBLIC_API_BASE_URL=http://localhost:5080
+CORE_API_BASE_URL=http://localhost:5080
 ~~~
 
 Copy it to local-only `.env` files; do not commit those files.
