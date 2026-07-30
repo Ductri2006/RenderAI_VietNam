@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
 using RenderVN.CoreApi.Data;
 using RenderVN.CoreApi.Domain;
 using RenderVN.CoreApi.Endpoints;
+using RenderVN.CoreApi.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -40,8 +42,11 @@ builder.Services.ConfigureApplicationCookie(options =>
     };
 });
 builder.Services.AddAuthorization();
+builder.Services.Configure<FormOptions>(options =>
+    options.MultipartBodyLengthLimit = UploadEndpoints.MaxMultipartBodyBytes);
 builder.Services.AddScoped<CreditLedger>();
 builder.Services.AddScoped<ICreditGrant>(services => services.GetRequiredService<CreditLedger>());
+builder.Services.AddSingleton<IImageStore, CloudinaryImageStore>();
 
 var app = builder.Build();
 
@@ -61,6 +66,7 @@ app.MapGet("/health", () => Results.Ok(new { status = "ok" }))
 
 app.MapAuthEndpoints();
 app.MapProjectEndpoints();
+app.MapUploadEndpoints();
 
 app.Run();
 
